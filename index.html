@@ -27,6 +27,7 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{height:100%}
+html{overflow-anchor:none}
 body{margin:0;background:var(--table);color:var(--ink);font-family:var(--f-body);font-size:15px;
   background-image:radial-gradient(var(--dot) 1px,transparent 1.2px);background-size:22px 22px;overflow-x:hidden}
 button,select,input{font:inherit;color:inherit}
@@ -1157,6 +1158,7 @@ function suggest(op){
 const deck = { ops: [], queue: [], history: [], ref: null, introShown: false };
 const opById = id => deck.ops.find(o => o.id === id);
 const monthLabel = ym => { const [y, m] = ym.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleDateString("fr-FR", {month:"short", year:"numeric"}); };
+const todayYM = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
 const shiftMonth = (ym, n) => { const [y, m] = ym.split("-").map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
 const shortAmt = v => (v < 0 ? "−" : "+") + Math.round(Math.abs(v)).toLocaleString("fr-FR");
 const initials = n => n.replace(/[^A-Za-zÀ-ÿ]/g, "").slice(0, 2);
@@ -1325,7 +1327,10 @@ function renderPiles(popId){
   add.innerHTML = '<div class="stack"><i style="bottom:0">+</i></div><div class="pile-name">Nouvelle pile</div><div class="pile-sum">choisis sa couleur</div>';
   add.onclick = () => deck.queue.length ? openEdit(opById(deck.queue[0]), "deck", true) : toast("Crée une pile en modifiant une carte.");
   box.appendChild(add);
-  if (popId){ const el = box.querySelector(`[data-id="${popId}"]`); if (el && el.scrollIntoView) el.scrollIntoView({behavior:"smooth", inline:"nearest", block:"nearest"}); }
+  // Défilement horizontal des piles seulement : la page reste centrée sur le deck
+  if (popId){ const el = box.querySelector(`[data-id="${popId}"]`);
+    if (el){ const bx = box.getBoundingClientRect(), r = el.getBoundingClientRect();
+      if (r.left < bx.left || r.right > bx.right) box.scrollBy({left: r.left - bx.left - (bx.width - r.width) / 2, behavior: "smooth"}); } }
 }
 
 let openPileId = null;
@@ -1479,6 +1484,7 @@ function showTab(name){
   document.querySelectorAll(".tab").forEach(t => { if (t.dataset.tab === name) t.setAttribute("aria-current","page"); else t.removeAttribute("aria-current"); });
   $("view-import").hidden = name !== "import"; $("view-tri").hidden = name !== "tri"; $("view-trend").hidden = name !== "trend"; $("view-budget").hidden = name !== "budget";
   hideTip();
+  window.scrollTo(0, 0);
   if (name === "budget") renderBudget();
   if (name === "tri") renderTri();
   if (name === "trend") renderTrend();
@@ -1600,7 +1606,11 @@ function renderTrend(){
 
   const years = [...new Set(ops.map(o => +o.month.slice(0, 4)))].sort();
   const lastMonth = ops.map(o => o.month).sort().pop();
-  if (!trState.year || !years.includes(trState.year)){ trState.year = +lastMonth.slice(0, 4); trState.month = +lastMonth.slice(5, 7) - 1; }
+  // Par défaut : le mois précédant la date du jour, sinon le dernier mois avec des données
+  if (!trState.year || !years.includes(trState.year)){
+    const prev = shiftMonth(todayYM(), -1), def = ops.some(o => o.month === prev) ? prev : lastMonth;
+    trState.year = +def.slice(0, 4); trState.month = +def.slice(5, 7) - 1;
+  }
   const ys = $("trYear"); ys.innerHTML = "";
   years.forEach(y => ys.appendChild(new Option("Année " + y, y)));
   ys.value = trState.year;
@@ -1897,7 +1907,7 @@ function renderBudget(){
     return;
   }
   $("budMain").hidden = false; $("budEmpty").hidden = true;
-  const refM = (deck.ref || new Date().toISOString()).slice(0, 7);
+  const refM = todayYM();   // le budget s'ouvre sur le mois de la date du jour
   if (!budState.ym) budState.ym = refM;
   const ym = budState.ym;
 
