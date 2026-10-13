@@ -1,0 +1,4 @@
+﻿"dateOp";"dateVal";"label";"category";"categoryParent";"supplierFound";"amount";"comment";"accountNum";"accountLabel";"accountbalance"
+"2026-10-12";"2026-10-12";"CARTE 11/10/26 CARREFOUR MARKET CB*4821";"Alimentation";"Vie quotidienne";"carrefour";"-64,32";"";"0001234";"BoursoBank";"2 341,58"
+"2026-10-11";"2026-10-11";"VIR INTERNE VERS LIVRET A";"Virements émis";"Mouvements internes";"";"-500,00";"";"0001234";"BoursoBank";"2 341,58"
+"2026-10-05";"2026-10-05";"VIR SEPA ACME SAS";"Salaires";"Revenus";"";"2 450,00";"";"0001234";"BoursoBank";"2 341,58"
