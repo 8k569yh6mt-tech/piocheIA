@@ -346,6 +346,23 @@ td.bad{color:var(--err);font-weight:600}
 }
 
 
+/* ---------- classement automatique ---------- */
+.badge.auto{border-color:#7048E8;color:#7048E8;background:#F3F0FF}
+.btn.bulk{border-color:#7048E8;color:#5F3DC4;background:#F3F0FF}
+.rules-modal{width:min(620px,100%)}
+.rl-set{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px;padding:10px 14px;border-radius:12px;background:#F3F0FF;border:1.5px solid #D0BFFF}
+.rl-set input{width:64px;border:2px solid var(--line);border-radius:10px;padding:5px 8px;font:inherit;font-weight:700;text-align:right}
+.rl-list{list-style:none;margin:0;padding:0;max-height:min(55vh,460px);overflow-y:auto;border-top:1.5px solid var(--line)}
+.rl-list li{display:grid;grid-template-columns:1fr;gap:8px 12px;padding:12px 4px;border-bottom:1.5px dashed var(--line);align-items:center}
+.rl-name{font-weight:700;font-size:14px;overflow-wrap:anywhere}
+.rl-meta{font-size:12.5px;color:var(--ink-2);overflow-wrap:anywhere}
+.rl-ctrl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;grid-column:1/-1}
+.rl-ctrl select{border:2px solid var(--ink);border-radius:10px;padding:5px 8px;font:inherit;font-size:13px;font-weight:700;background:color-mix(in srgb,var(--c) 30%,white);max-width:100%}
+.rl-ask{display:flex;gap:6px;align-items:center;font-size:13px}
+.rl-ask input{width:16px;height:16px;accent-color:var(--ink)}
+.rl-del{margin-left:auto;border:0;background:none;color:var(--ink-2);font:inherit;font-size:13px;text-decoration:underline;cursor:pointer}
+.rl-empty{padding:16px 4px;color:var(--ink-2);font-size:14px}
+
 /* ---------- budget ---------- */
 .logo-ia{color:#7048E8}
 .meter{display:flex;flex-direction:column;gap:4px;width:100%}
@@ -399,7 +416,7 @@ td.bad{color:var(--err);font-weight:600}
 <body>
 <div class="app">
   <header class="top">
-    <div class="logo"><span class="logo-mark" aria-hidden="true"><i></i><i></i><i></i></span>Pioche<span class="logo-ia">.IA</span></div>
+    <div class="logo"><span class="logo-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>Pioche<span class="logo-ia">.IA</span></span></div>
     <nav class="tabs" aria-label="Sections">
       <button class="tab" data-tab="tri">Tri<small id="tabCount"></small></button>
       <button class="tab" data-tab="trend">Tendances</button>
@@ -513,7 +530,8 @@ td.bad{color:var(--err);font-weight:600}
             <button class="btn ghosty small" id="mOut">↑ Hors budget</button>
             <button class="btn small" id="mOk">Valider →</button>
           </div>
-          <div class="deck-tools"><button class="link" id="undoBtn">Annuler le dernier tri</button></div>
+          <div class="deck-tools"><button class="btn ghosty small bulk" id="bulkBtn" hidden></button></div>
+          <div class="deck-tools" style="margin-top:4px"><button class="link" id="undoBtn">Annuler le dernier tri</button><button class="link" id="rulesBtn">Règles apprises</button></div>
         </div>
         <div class="side side-stack">
           <div class="side-pair">
@@ -645,6 +663,17 @@ td.bad{color:var(--err);font-weight:600}
         <select id="recFreq" aria-label="Fréquence"><option value="mensuel">tous les mois</option><option value="trimestriel">tous les trimestres</option><option value="annuel">tous les ans</option></select></label>
     </div>
     <div class="rows-c"><button class="btn ghosty" id="editCancel">Remettre dans le deck</button><button class="btn" id="editSave">Poser sur la pile</button></div>
+  </div>
+</div>
+
+<!-- ===== Règles apprises ===== -->
+<div class="scrim" id="rulesScrim" hidden>
+  <div class="modal small-modal rules-modal" role="dialog" aria-labelledby="rulesTitle" aria-modal="true">
+    <div class="m-head"><h2 id="rulesTitle" style="font-size:24px">Règles apprises</h2><button class="x" id="rulesClose" aria-label="Fermer">×</button></div>
+    <p id="rulesSub" style="margin:-10px 0 0;font-size:14px;color:var(--ink-2)"></p>
+    <div class="rl-set"><label for="seuilInput">Le bouton « Ranger le reste » range les cartes de moins de</label><span><input id="seuilInput" type="text" inputmode="decimal"> €</span></div>
+    <ul class="rl-list" id="rulesList"></ul>
+    <div class="rows-c"><button class="btn ghosty" id="rulesDone">Fermer</button></div>
   </div>
 </div>
 
@@ -1017,9 +1046,10 @@ function renderRecap(){
   const inSum = ops.filter(o => o.amount > 0).reduce((s, o) => s + o.amount, 0);
   const outSum = ops.filter(o => o.amount < 0).reduce((s, o) => s + o.amount, 0);
   const cats = new Set(ops.map(o => o.bankCat).filter(Boolean));
+  const toSort = imported.added - (imported.auto || 0);
   box.innerHTML = `
     <div class="recap-head">
-      <div><h2>${imported.added} nouvelle${imported.added > 1 ? "s" : ""} opération${imported.added > 1 ? "s" : ""} à trier</h2><p>${esc(file)} · du ${fmtDate(dates[0])} au ${fmtDate(dates[dates.length-1])}${imported.known ? ` · ${imported.known} déjà connue${imported.known > 1 ? "s" : ""}, ignorée${imported.known > 1 ? "s" : ""}` : ""}</p></div>
+      <div><h2>${toSort ? `${toSort} nouvelle${toSort > 1 ? "s" : ""} opération${toSort > 1 ? "s" : ""} à trier` : imported.added ? "Tout est déjà rangé" : "Rien de nouveau"}</h2><p>${imported.auto ? `${imported.auto} rangée${imported.auto > 1 ? "s" : ""} automatiquement grâce à tes règles · ` : ""}${esc(file)} · du ${fmtDate(dates[0])} au ${fmtDate(dates[dates.length-1])}${imported.known ? ` · ${imported.known} déjà connue${imported.known > 1 ? "s" : ""}, ignorée${imported.known > 1 ? "s" : ""}` : ""}</p></div>
       <button class="btn" id="toTri">Passer au tri</button>
     </div>
     <div class="stats">
@@ -1090,7 +1120,25 @@ const SUGGEST_RULES = [
   ["sante",      /pharma|docteur|\bdr\b|doctolib|medecin|dentiste|mutuelle|cpam|ameli|sante|optic|hopital/],
   ["loisirs",    /fnac|cinema|\bugc\b|pathe|amazon|decathlon|zara|loisir|shopping|achats|sport|voyage|hotel|airbnb/],
 ];
-const learned = {};   // marchand -> catégorie choisie pendant cette session
+const learned = {};   // marchand -> {cat, n, sum, m, ask, ex} : règles apprises en triant
+const settings = {seuil: 50};
+function ruleOf(k){
+  if (!k || !learned[k]) return null;
+  if (typeof learned[k] === "string") learned[k] = {cat: learned[k], n: 1, sum: 0, m: 0, ask: false};
+  return learned[k];
+}
+function learn(op, catId){
+  const k = merchantKey(op.label); if (!k) return;
+  let r = ruleOf(k);
+  if (!r || r.cat !== catId) r = learned[k] = {cat: catId, n: 0, sum: 0, m: 0, ask: r ? r.ask : false};
+  // Un montant hors norme confirmé ne déforme pas la moyenne
+  if (!r.m || !unusual(r, op)){ r.sum += Math.abs(op.amount); r.m++; }
+  r.n++; r.ex = op.label;
+}
+// Montant inhabituel : plus du double de la moyenne de la règle, et au moins 20 € d'écart
+function unusual(r, op){ if (!r.m) return false; const avg = r.sum / r.m, a = Math.abs(op.amount); return a > avg * 2 && a - avg >= 20; }
+// Règle applicable sans passer par le deck
+function autoRule(op){ const r = ruleOf(merchantKey(op.label)); return r && !r.ask && cat(r.cat).id === r.cat && !unusual(r, op) ? r : null; }
 function merchantKey(label){
   return norm(label)
     .replace(/\b(cb|carte|prlv|prelevement|sepa|vir|virement|inst|paiement|retrait|dab|recu|de|du|vers|en|votre|faveur|par)\b/g, " ")
@@ -1099,7 +1147,8 @@ function merchantKey(label){
 }
 function suggest(op){
   const k = merchantKey(op.label);
-  if (k && learned[k]) return {cat: learned[k], learned: true};
+  const r = ruleOf(k);
+  if (r && cat(r.cat).id === r.cat) return {cat: r.cat, learned: true, unusual: unusual(r, op), ask: r.ask};
   const txt = norm(op.label + " " + op.bankCat);
   for (const [id, re] of SUGGEST_RULES) if (re.test(txt)) return {cat: id};
   return {cat: op.amount > 0 ? "revenus" : "autres"};
@@ -1128,13 +1177,16 @@ function renderProgress(){
   $("tabCount").textContent = left || "";
   $("undoBtn").disabled = !deck.history.length;
   $("undoBtn").style.visibility = deck.history.length ? "visible" : "hidden";
+  const small = bulkIds(), bb = $("bulkBtn");
+  bb.hidden = small.length < 2;
+  bb.textContent = `⚡ Ranger les ${small.length} cartes de moins de ${settings.seuil} €`;
 }
 
 function showIntro(){
   deck.introShown = true;
   const n = deck.queue.length, dates = deck.ops.map(o => o.date).sort();
   $("introTitle").innerHTML = `Tu as <em>${n}</em> opération${n > 1 ? "s" : ""} à classer`;
-  $("introText").textContent = `${save.lastExport ? `Depuis ton dernier export du ${fmtDate(save.lastExport.slice(0, 10))}` : `Du ${fmtDate(dates[0])} au ${fmtDate(dates[dates.length - 1])}`}. Pioche-les une par une : à droite pour valider la catégorie, à gauche pour la corriger, vers le haut pour l'exclure des totaux.`;
+  $("introText").textContent = `${save.lastExport ? `Depuis ton dernier export du ${fmtDate(save.lastExport.slice(0, 10))}` : `Du ${fmtDate(dates[0])} au ${fmtDate(dates[dates.length - 1])}`}. Pioche-les une par une : à droite pour valider la catégorie, à gauche pour la corriger, vers le haut pour l'exclure des totaux.${deck.lastAuto ? ` ${deck.lastAuto} autre${deck.lastAuto > 1 ? "s" : ""} déjà rangée${deck.lastAuto > 1 ? "s" : ""} grâce à tes règles.` : ""}`;
   const fan = $("introFan"); fan.innerHTML = "";
   ["#FFC21A","#FF7A59","#3D7BFF","#2BD19A","#A68BFF"].forEach((c, k) => { const i = document.createElement("i"); i.style.background = c; i.style.transform = `rotate(${(k - 2) * 13}deg)`; fan.appendChild(i); });
   $("introScrim").hidden = false; $("introGo").focus();
@@ -1160,7 +1212,7 @@ function renderDeck(){
         ${op.recurring ? `<span class="badge">↻ ${op.recurring}</span>` : ""}</div>
       <div class="clabel"></div>
       <div class="camount ${op.amount > 0 ? "pos" : ""}">${fmtEUR(op.amount)}</div>
-      <div class="suggest">${op.sug.learned ? "Comme la dernière fois :" : "Ranger dans"} <span class="chip${c.out ? " hatch" : ""}" style="--c:${c.c}"></span></div>
+      <div class="suggest">${op.sug.unusual ? "Montant inhabituel. D'habitude :" : op.sug.learned ? "Comme la dernière fois :" : "Ranger dans"} <span class="chip${c.out ? " hatch" : ""}" style="--c:${c.c}"></span></div>
       ${op.bankCat ? `<div class="bankline"></div>` : ""}
       ${validBudget(op.month) && validBudget(op.month).lines[c.id] ? `<div class="card-bud">${esc(c.name)} en ${MONTHS_SHORT[+op.month.slice(5) - 1]} : <b>${eur0(spentIn(op.month)[c.id] || 0)}</b> sur ${eur0(validBudget(op.month).lines[c.id])}</div>` : ""}
     </div>
@@ -1204,15 +1256,19 @@ function resetCard(){
 let busy = false;
 function place(op, catId){
   if (busy) return; busy = true;
-  op.cat = catId;
-  const k = merchantKey(op.label);
-  if (k && catId !== HORS){
-    learned[k] = catId;
-    deck.queue.forEach(id => { const o = opById(id); if (o !== op && merchantKey(o.label) === k) o.sug = {cat: catId, learned: true}; });
-  }
-  deck.queue = deck.queue.filter(id => id !== op.id);
-  deck.history.push(op.id);
+  op.cat = catId; op.auto = null;
+  learn(op, catId);
+  // Les autres cartes du même commerçant suivent la règle, sauf montant inhabituel
+  const k = merchantKey(op.label), batch = [op.id];
+  if (k) deck.queue.forEach(id => {
+    const o = opById(id); if (o === op || merchantKey(o.label) !== k) return;
+    o.sug = suggest(o);
+    if (autoRule(o)){ o.cat = catId; o.auto = "regle"; batch.push(o.id); }
+  });
+  deck.queue = deck.queue.filter(id => !batch.includes(id));
+  deck.history.push(batch);
   touch();
+  if (batch.length > 1){ const n = batch.length - 1; toast(`${n} autre${n > 1 ? "s" : ""} opération${n > 1 ? "s" : ""} « ${k.toUpperCase()} » rangée${n > 1 ? "s" : ""} aussi dans ${cat(catId).name}`); }
   const el = document.querySelector("#deck .card");
   const pile = document.querySelector(`.pile[data-id="${catId}"]`);
   const finish = () => { busy = false; renderPiles(catId); renderDeck(); renderProgress(); };
@@ -1227,11 +1283,13 @@ function place(op, catId){
 function validate(){ const op = opById(deck.queue[0]); if (op) place(op, op.sug.cat); }
 function exclude(){ const op = opById(deck.queue[0]); if (op) place(op, HORS); }
 function undo(){
-  const id = deck.history.pop(); if (!id) return;
-  const op = opById(id); op.cat = null; deck.queue.unshift(id);
+  let ids = deck.history.pop(); if (!ids) return;
+  if (!Array.isArray(ids)) ids = [ids];
+  ids.forEach(id => { const o = opById(id); if (o){ o.cat = null; o.auto = null; o.sug = suggest(o); } });
+  deck.queue = ids.concat(deck.queue.filter(id => !ids.includes(id)));
   touch();
   renderPiles(); renderDeck(); renderProgress();
-  toast("Carte remise sur le deck");
+  toast(ids.length > 1 ? `${ids.length} cartes remises sur le deck` : "Carte remise sur le deck");
 }
 $("undoBtn").onclick = undo;
 $("btnOk").onclick = validate; $("mOk").onclick = validate;
@@ -1280,7 +1338,8 @@ function openPile(id){
   const sum = Math.round(ops.reduce((s, o) => s + o.amount, 0) * 100) / 100;
   $("pmSwatch").style.setProperty("--c", c.out ? "#F1F3F5" : c.c);
   $("pmTitle").textContent = c.name;
-  $("pmSub").textContent = `30 derniers jours · ${ops.length} opération${ops.length > 1 ? "s" : ""}${c.out ? " exclue" + (ops.length > 1 ? "s" : "") + " des totaux" : ""}`;
+  const nAuto = ops.filter(o => o.auto).length;
+  $("pmSub").textContent = `30 derniers jours · ${ops.length} opération${ops.length > 1 ? "s" : ""}${c.out ? " exclue" + (ops.length > 1 ? "s" : "") + " des totaux" : ""}${nAuto ? ` · ${nAuto} rangée${nAuto > 1 ? "s" : ""} auto` : ""}`;
   $("pmTotal").textContent = ops.length ? fmtEUR(sum) : "";
   const ul = $("pmList"); ul.innerHTML = "";
   if (!ops.length) ul.innerHTML = '<li class="pm-empty" style="display:block;cursor:default">Pile vide pour l\'instant. Glisse une carte ici pour la commencer.</li>';
@@ -1290,6 +1349,7 @@ function openPile(id){
     const l = li.querySelector(".l"); l.textContent = o.label;
     if (o.recurring) l.insertAdjacentHTML("beforeend", `<span class="badge">↻ ${o.recurring}</span>`);
     if (o.month !== o.date.slice(0, 7)) l.insertAdjacentHTML("beforeend", `<span class="badge month">sur ${monthLabel(o.month)}</span>`);
+    if (o.auto) l.insertAdjacentHTML("beforeend", `<span class="badge auto" title="Rangée automatiquement. Touche pour vérifier.">auto</span>`);
     li.onclick = () => { $("pileScrim").hidden = true; openEdit(o, "pile"); };
     li.onkeydown = e => { if (e.key === "Enter") li.onclick(); };
     ul.appendChild(li);
@@ -1367,9 +1427,9 @@ $("editSave").onclick = () => {
     renderPiles();
     setTimeout(() => place(op, edit.cat), 160);
   } else {
-    const before = op.cat; op.cat = edit.cat;
-    if (!before){ deck.queue = deck.queue.filter(id => id !== op.id); deck.history.push(op.id); renderProgress(); renderDeck(); }
-    if (before !== edit.cat){ const k = merchantKey(op.label); if (k && edit.cat !== HORS) learned[k] = edit.cat; }
+    const before = op.cat; op.cat = edit.cat; op.auto = null;
+    if (!before){ deck.queue = deck.queue.filter(id => id !== op.id); deck.history.push([op.id]); renderProgress(); renderDeck(); }
+    if (before !== edit.cat) learn(op, edit.cat);
     renderPiles(edit.cat); renderDone(); touch();
     if (openPileId) openPile(openPileId);
   }
@@ -1385,10 +1445,10 @@ function renderDone(){
   const max = Math.max(1, ...rows.map(r => Math.abs(r.sum)));
   const inSum = counted.filter(o => o.amount > 0).reduce((s, o) => s + o.amount, 0);
   const outSum = counted.filter(o => o.amount < 0).reduce((s, o) => s + o.amount, 0);
-  const rec = deck.ops.filter(o => o.recurring).length;
+  const rec = deck.ops.filter(o => o.recurring).length, nAuto = deck.ops.filter(o => o.auto).length;
   box.className = "done-card";
   box.innerHTML = `
-    <div class="recap-head"><div><h2>Deck vide, tout est rangé</h2><p>${deck.ops.length} opérations triées${out.length ? `, dont ${out.length} hors budget` : ""}${rec ? ` · ${rec} récurrente${rec > 1 ? "s" : ""}` : ""}</p></div>
+    <div class="recap-head"><div><h2>Deck vide, tout est rangé</h2><p>${deck.ops.length} opérations triées${out.length ? `, dont ${out.length} hors budget` : ""}${rec ? ` · ${rec} récurrente${rec > 1 ? "s" : ""}` : ""}${nAuto ? ` · ${nAuto} rangée${nAuto > 1 ? "s" : ""} automatiquement` : ""}</p></div>
       <button class="btn ghosty" id="undoDone">Annuler le dernier tri</button></div>
     <div class="stats">
       <div class="stat"><span>Entrées comptées</span><b class="pos">${fmtEUR(inSum)}</b></div>
@@ -1397,13 +1457,14 @@ function renderDone(){
       <div class="stat"><span>Hors budget</span><b>${fmtEUR(Math.round(out.reduce((s, o) => s + o.amount, 0) * 100) / 100)}</b></div>
     </div>
     <div class="bars">${rows.map(r => `<div class="brow"><span class="n">${esc(r.c.name)}</span><span class="t"><i style="--c:${r.c.c};width:${Math.max(3, Math.abs(r.sum) / max * 100)}%"></i></span><span class="v ${r.sum > 0 ? "pos" : ""}">${fmtEUR(r.sum)}</span></div>`).join("")}</div>
-    <div class="rows-c" style="justify-content:flex-start"><button class="btn" id="saveDone">Sauvegarder mon tri</button></div>`;
-  $("undoDone").onclick = undo; $("saveDone").onclick = exportSave;
+    <div class="rows-c" style="justify-content:flex-start"><button class="btn" id="saveDone">Sauvegarder mon tri</button><button class="btn ghosty" id="rulesDone2">Règles apprises</button></div>`;
+  $("undoDone").onclick = undo; $("saveDone").onclick = exportSave; $("rulesDone2").onclick = openRules;
 }
 
 /* ---------- clavier ---------- */
 document.addEventListener("keydown", e => {
   if ($("view-tri").hidden) return;
+  if (!$("rulesScrim").hidden){ if (e.key === "Escape") closeRules(); return; }
   if (!$("editScrim").hidden){ if (e.key === "Escape") closeEdit(); return; }
   if (!$("pileScrim").hidden){ if (e.key === "Escape") $("pmClose").onclick(); return; }
   if (!$("introScrim").hidden || !$("mapScrim").hidden) return;
@@ -1922,6 +1983,74 @@ $("budValidate").onclick = () => {
 $("budOkGo").onclick = () => { $("budOkScrim").hidden = true; };
 
 /* =========================================================
+   11. Classement automatique : rangement en lot et règles apprises
+   ========================================================= */
+// Cartes du deck sous le seuil, hors règles « toujours me demander »
+function bulkIds(){ return deck.queue.filter(id => { const o = opById(id); return o && Math.abs(o.amount) < settings.seuil && !o.sug.ask; }); }
+
+$("bulkBtn").onclick = async () => {
+  const ids = bulkIds(); if (!ids.length) return;
+  const keep = deck.queue.length - ids.length;
+  const ok = await ask(`Ranger ${ids.length} cartes d'un coup ?`,
+    `Chaque carte de moins de ${settings.seuil} € va dans sa catégorie suggérée, avec un badge « auto » pour la retrouver dans les piles. ${keep ? `Les ${keep} autres restent à trier à la main.` : ""} Tu pourras annuler.`, "Ranger");
+  if (!ok) return;
+  ids.forEach(id => { const o = opById(id); o.cat = o.sug.cat; o.auto = "lot"; });
+  deck.queue = deck.queue.filter(id => !ids.includes(id));
+  deck.history.push(ids);
+  touch(); renderPiles(); renderDeck(); renderProgress();
+  toast(`${ids.length} cartes rangées automatiquement`);
+};
+
+// Recalcule la suggestion des cartes restantes d'un commerçant
+function refreshSug(k){ deck.queue.forEach(id => { const o = opById(id); if (merchantKey(o.label) === k) o.sug = suggest(o); }); renderDeck(); renderProgress(); }
+
+function openRules(){ renderRules(); $("rulesScrim").hidden = false; $("rulesClose").focus(); }
+function closeRules(){ $("rulesScrim").hidden = true; }
+function renderRules(){
+  const count = {};
+  deck.ops.forEach(o => { if (!o.cat) return; const k = merchantKey(o.label); if (k) count[k] = (count[k] || 0) + 1; });
+  const keys = Object.keys(learned).filter(k => ruleOf(k)).sort((a, b) => (count[b] || 0) - (count[a] || 0) || a.localeCompare(b));
+  $("rulesSub").textContent = keys.length
+    ? `${keys.length} règle${keys.length > 1 ? "s" : ""} apprise${keys.length > 1 ? "s" : ""} en triant. Les opérations d'un commerçant connu sont rangées automatiquement, sauf si le montant sort de l'habitude.`
+    : "";
+  $("seuilInput").value = settings.seuil;
+  const ul = $("rulesList"); ul.innerHTML = "";
+  if (!keys.length) ul.innerHTML = '<li class="rl-empty">Aucune règle pour l\'instant. Chaque carte que tu ranges en crée une : la prochaine opération du même commerçant sera rangée toute seule.</li>';
+  keys.forEach(k => {
+    const r = learned[k], c = cat(r.cat), li = document.createElement("li");
+    li.innerHTML = `<div><div class="rl-name"></div><div class="rl-meta"></div></div>
+      <div class="rl-ctrl"><select aria-label="Catégorie de la règle"></select>
+        <label class="rl-ask"><input type="checkbox"> Toujours me demander</label>
+        <button class="rl-del" type="button">Oublier</button></div>`;
+    li.querySelector(".rl-name").textContent = k.toUpperCase();
+    const avg = r.m ? ` · en moyenne ${eur0(r.sum / r.m)}` : "";
+    li.querySelector(".rl-meta").textContent = `${r.ex ? `ex. ${r.ex} · ` : ""}${count[k] || 0} opération${(count[k] || 0) > 1 ? "s" : ""} rangée${(count[k] || 0) > 1 ? "s" : ""}${avg}`;
+    const sel = li.querySelector("select");
+    CATS.forEach(x => { const o = document.createElement("option"); o.value = x.id; o.textContent = x.name; o.selected = x.id === r.cat; sel.appendChild(o); });
+    sel.style.setProperty("--c", c.out ? "#F1F3F5" : c.c);
+    sel.onchange = () => {
+      const from = r.cat, to = sel.value; let moved = 0;
+      deck.ops.forEach(o => { if (o.auto && o.cat === from && merchantKey(o.label) === k){ o.cat = to; moved++; } });
+      r.cat = to; touch(); renderPiles(); refreshSug(k); renderRules();
+      toast(moved ? `${moved} opération${moved > 1 ? "s" : ""} rangée${moved > 1 ? "s" : ""} auto déplacée${moved > 1 ? "s" : ""} vers ${cat(to).name}` : `Règle mise à jour : ${cat(to).name}`);
+    };
+    const chk = li.querySelector("input"); chk.checked = !!r.ask;
+    chk.onchange = () => { r.ask = chk.checked; touch(); refreshSug(k); };
+    li.querySelector(".rl-del").onclick = () => { delete learned[k]; touch(); refreshSug(k); renderRules(); toast("Règle oubliée"); };
+    ul.appendChild(li);
+  });
+}
+$("seuilInput").onchange = () => {
+  const v = parseAmount($("seuilInput").value, ",");
+  if (v !== null && Math.abs(v) >= 1){ settings.seuil = Math.round(Math.abs(v)); touch(); renderProgress(); }
+  $("seuilInput").value = settings.seuil;
+};
+$("rulesBtn").onclick = openRules;
+$("rulesClose").onclick = $("rulesDone").onclick = closeRules;
+$("rulesScrim").addEventListener("click", e => { if (e.target === $("rulesScrim")) closeRules(); });
+
+
+/* =========================================================
    8. Sauvegarde
    ========================================================= */
 const SKEY = "pioche.etat";
@@ -1934,7 +2063,7 @@ function snapshot(){
     app: "pioche", version: 1, savedAt: new Date().toISOString(), lastExport: save.lastExport,
     categories: CATS,
     operations: deck.ops.map(({sug, ...o}) => o),
-    learned, formats: loadProfiles(), imports: save.imports, budgets: BUDGETS,
+    learned, settings, formats: loadProfiles(), imports: save.imports, budgets: BUDGETS,
   };
 }
 function persistLocal(){
@@ -1956,6 +2085,7 @@ function restore(data){
   }
   Object.keys(learned).forEach(k => delete learned[k]);
   Object.assign(learned, data.learned || {});
+  Object.assign(settings, {seuil: 50}, data.settings || {});
   Object.keys(BUDGETS).forEach(k => delete BUDGETS[k]); Object.assign(BUDGETS, data.budgets || {});
   Object.keys(budDraft).forEach(k => delete budDraft[k]); budState.ym = null;
   deck.ops = data.operations.map(o => ({...o}));
@@ -1977,13 +2107,19 @@ function mergeImport(ops, file){
   if (deck.ops.some(o => o.sample)){ deck.ops = deck.ops.filter(o => !o.sample); toast("L'année d'exemple a été retirée."); }
   const known = new Set(deck.ops.map(o => o.id));
   const fresh = ops.filter(o => !known.has(o.id));
-  fresh.forEach(o => { const n = {...o, cat: null, month: o.date.slice(0, 7), recurring: null}; n.sug = suggest(n); deck.ops.push(n); });
+  let auto = 0;
+  fresh.forEach(o => {
+    const n = {...o, cat: null, month: o.date.slice(0, 7), recurring: null}; n.sug = suggest(n);
+    const r = autoRule(n); if (r){ n.cat = r.cat; n.auto = "regle"; r.n++; auto++; }
+    deck.ops.push(n);
+  });
+  deck.lastAuto = auto;
   deck.queue = deck.ops.filter(o => !o.cat).sort((a, b) => a.date.localeCompare(b.date)).map(o => o.id);
   deck.ref = deck.ops.map(o => o.date).sort().pop();
   if (fresh.length) deck.introShown = false;
-  save.imports.push({file, at: new Date().toISOString(), added: fresh.length});
+  save.imports.push({file, at: new Date().toISOString(), added: fresh.length, auto});
   touch();
-  return {added: fresh.length, known: ops.length - fresh.length};
+  return {added: fresh.length, known: ops.length - fresh.length, auto};
 }
 
 async function writeHandle(){
