@@ -324,6 +324,11 @@ td.bad{color:var(--err);font-weight:600}
 .heat td{border:0;padding:0;text-align:center;vertical-align:middle;font-variant-numeric:tabular-nums;border-radius:8px;height:34px;min-width:52px;color:var(--ink);font-weight:600}
 .heat td.empty{background:#F4F5FA;color:var(--ink-3);font-weight:400}
 .heat td.cur{box-shadow:inset 0 0 0 2px var(--ink)}
+.heat td.cell{cursor:pointer;transition:transform .12s}
+.heat td.cell:hover,.heat td.cell:focus-visible{transform:scale(1.08);box-shadow:inset 0 0 0 2px var(--ink);outline:0}
+.hc-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}
+.hc-stats .stat b{font-size:17px}
+.hc-stats .delta{margin-top:4px;display:inline-block}
 .heat td.tot{background:none;text-align:right;padding-left:10px;white-space:nowrap}
 .heat td.avg{color:var(--ink-2)}
 .heat td.trend{background:none;text-align:left;padding-left:6px;white-space:nowrap}
@@ -462,7 +467,7 @@ table.tx{min-width:0;font-size:14px}
 <body>
 <div class="app">
   <header class="top">
-    <div class="logo"><span class="logo-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="logo-txt"><span>Pioche<span class="logo-ia">.IA</span></span><small class="logo-ver" id="appVersion">v1.00</small></span></div>
+    <div class="logo"><span class="logo-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="logo-txt"><span>Pioche<span class="logo-ia">.IA</span></span><small class="logo-ver" id="appVersion">v1.01</small></span></div>
     <nav class="tabs" aria-label="Sections">
       <button class="tab" data-tab="tri">Tri<small id="tabCount"></small></button>
       <button class="tab" data-tab="ops">Opérations</button>
@@ -685,6 +690,18 @@ table.tx{min-width:0;font-size:14px}
   </div>
 </div>
 <div class="tooltip" id="tip" hidden></div>
+
+<!-- ===== Résumé d'une case (catégorie × mois) ===== -->
+<div class="scrim" id="hcScrim" hidden>
+  <div class="modal small-modal" role="dialog" aria-labelledby="hcTitle" aria-modal="true" style="width:min(480px,100%)">
+    <div class="pm-head"><div class="pm-swatch" id="hcSwatch"></div><div><h3 id="hcTitle"></h3><p id="hcSub"></p></div><div class="pm-total" id="hcTotal"></div></div>
+    <div class="hc-stats" id="hcStats"></div>
+    <div id="hcMerchBox"><p class="section-label">Où est parti l'argent</p><ul class="cd-merch" id="hcMerch"></ul></div>
+    <p class="section-label" id="hcOpsLabel" style="margin-top:16px"></p>
+    <ul class="pm-list" id="hcOps" style="max-height:min(30vh,220px)"></ul>
+    <div class="rows-c"><button class="btn ghosty" id="hcYear">Voir toute l'année</button><button class="btn" id="hcClose">Fermer</button></div>
+  </div>
+</div>
 
 <!-- ===== Budget validé ===== -->
 <div class="scrim" id="budOkScrim" hidden style="align-items:center">
@@ -1637,11 +1654,11 @@ function yearGrid(year, maxDay){
   return {grid, has};
 }
 
-function monthInfo(){
+function monthInfo(m = trState.month){
   const ref = deck.ref;
   const refMonth = ref ? ref.slice(0, 7) : null;
-  const ym = `${trState.year}-${pad(trState.month + 1)}`;
-  const daysIn = new Date(trState.year, trState.month + 1, 0).getDate();
+  const ym = `${trState.year}-${pad(m + 1)}`;
+  const daysIn = new Date(trState.year, m + 1, 0).getDate();
   const partial = ym === refMonth && +ref.slice(8, 10) < daysIn;
   return {ym, partial, day: partial ? +ref.slice(8, 10) : null};
 }
@@ -1820,19 +1837,72 @@ function renderHeat(grid, has){
     arr.forEach((v, k) => {
       if (!has[k]) { h += `<td class="empty${k === m ? " cur" : ""}">·</td>`; return; }
       const pct = Math.round(12 + Math.abs(v) / max * 88);
-      h += `<td class="${k === m ? "cur" : ""}" style="background:color-mix(in srgb, ${c.c} ${pct}%, #FFFFFF)" title="${esc(c.name)} · ${MONTHS_SHORT[k]} : ${eur0(v)}">${Math.abs(v) >= 1 ? compact(v) : "0"}</td>`;
+      h += `<td class="cell${k === m ? " cur" : ""}" data-cat="${c.id}" data-m="${k}" tabindex="0" role="button" style="background:color-mix(in srgb, ${c.c} ${pct}%, #FFFFFF)" title="${esc(c.name)} · ${MONTHS_SHORT[k]} : ${eur0(v)}">${Math.abs(v) >= 1 ? compact(v) : "0"}</td>`;
     });
     const nM = has.filter(Boolean).length;
     h += `<td class="tot">${eur0(tot)}</td><td class="tot avg" title="Total divisé par les ${nM} mois avec des données">${nM ? eur0(tot / nM) : "–"}</td><td class="trend">${trendWord(arr, has, m, kindOf(c))}</td></tr>`;
   });
   t.innerHTML = h + "</tbody>";
   t.querySelectorAll(".rowh button").forEach(b => { b.querySelector("span").textContent = cat(b.dataset.cat).name; b.onclick = () => openCatTrend(b.dataset.cat); });
+  t.querySelectorAll("td.cell").forEach(td => {
+    const go = () => openHeatCell(td.dataset.cat, +td.dataset.m);
+    td.onclick = go;
+    td.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+  });
 }
+
+/* ---------- résumé d'une case : une catégorie, un mois ---------- */
+function openHeatCell(id, k){
+  hideTip();
+  const c = cat(id), {grid, has} = yearGrid(trState.year), kind = kindOf(c);
+  const arr = grid[id] || Array(12).fill(0), v = arr[k];
+  const info = monthInfo(k), ym = info.ym, partial = info.partial;
+  const nM = has.filter(Boolean).length, avg = nM ? arr.reduce((s, x) => s + x, 0) / nM : null;
+  const ops = counted().filter(o => bucketOf(o) === id && o.month === ym).sort((a, b) => b.date.localeCompare(a.date));
+  $("hcSwatch").style.setProperty("--c", c.c);
+  $("hcTitle").textContent = c.name;
+  $("hcSub").textContent = monthLong(ym).replace(/^./, x => x.toUpperCase()) + (partial ? ` (au ${info.day})` : "");
+  $("hcTotal").textContent = eur0(v);
+  // Mois le plus élevé de l'année pour cette catégorie ?
+  const ks = arr.map((x, i) => i).filter(i => has[i]);
+  const rank = ks.filter(i => Math.abs(arr[i]) > Math.abs(v)).length + 1;
+  const budget = validBudget(ym) && validBudget(ym).lines[id];
+  const biggest = ops.reduce((b, o) => !b || Math.abs(o.amount) > Math.abs(b.amount) ? o : b, null);
+  $("hcStats").innerHTML = `
+    <div class="stat"><span>Opérations</span><b>${ops.length}</b></div>
+    <div class="stat"><span>Moyenne / mois</span><b>${avg !== null ? eur0(avg) : "–"}</b><br>${avg !== null && nM > 1 ? deltaChip(v, avg, kind !== "depense") : ""}</div>
+    <div class="stat"><span>Rang en ${trState.year}</span><b>${ks.length > 1 ? (rank === 1 ? "Le plus élevé" : rank === ks.length ? "Le plus bas" : `${rank}<sup>e</sup> sur ${ks.length}`) : "–"}</b></div>
+    <div class="stat"><span>Plus grosse opération</span><b>${biggest ? eur0(Math.abs(biggest.amount)) : "–"}</b></div>
+    ${budget ? `<div class="stat" style="grid-column:1/-1"><span>Budget du mois</span>${meterHTML(v, budget, kind === "epargne")}</div>` : ""}`;
+  // Marchands du mois
+  const merch = {};
+  ops.forEach(o => { const key = merchantKey(o.label) || o.label; merch[key] = merch[key] || {label: o.label, v: 0, n: 0}; merch[key].v += signedFor(c, o.amount); merch[key].n++; });
+  const top = Object.values(merch).sort((a, b) => Math.abs(b.v) - Math.abs(a.v)).slice(0, 4), mx = Math.max(1, ...top.map(t => Math.abs(t.v)));
+  const ul = $("hcMerch"); ul.innerHTML = ""; ul.style.setProperty("--c", c.c);
+  top.forEach(t => { const li = document.createElement("li"); li.innerHTML = `<span class="m"></span><span class="v">${eur0(t.v)} · ${t.n}×</span><span class="mbar"><i style="width:${Math.abs(t.v) / mx * 100}%"></i></span>`; li.querySelector(".m").textContent = t.label; ul.appendChild(li); });
+  $("hcMerchBox").hidden = top.length < 2 || ops.length <= 4; // peu d'opérations : la liste suffit
+  // Opérations
+  $("hcOpsLabel").textContent = `Les opérations (${ops.length})`;
+  const ol = $("hcOps"); ol.innerHTML = "";
+  ops.forEach(o => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="d">${new Date(o.date + "T00:00:00").toLocaleDateString("fr-FR", {day: "2-digit", month: "short"})}</span><span class="l"></span><span class="a ${o.amount > 0 ? "pos" : ""}">${fmtEUR(o.amount)}</span>`;
+    li.querySelector(".l").textContent = o.label;
+    li.onclick = () => { $("hcScrim").hidden = true; openEdit(o, "pile"); };
+    ol.appendChild(li);
+  });
+  if (!ops.length) ol.innerHTML = '<li class="pm-empty" style="display:block;cursor:default">Aucune opération ce mois-ci.</li>';
+  $("hcYear").onclick = () => { $("hcScrim").hidden = true; openCatTrend(id, k); };
+  $("hcScrim").hidden = false; $("hcClose").focus();
+}
+$("hcClose").onclick = () => { $("hcScrim").hidden = true; };
+$("hcScrim").addEventListener("click", e => { if (e.target === $("hcScrim")) $("hcClose").onclick(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("hcScrim").hidden) $("hcClose").onclick(); });
 
 // Tendance : moyenne des 3 derniers mois (jusqu'au mois choisi) contre les 3 précédents
 function trendWord(arr, has, m, kind){
   const idx = []; for (let k = 0; k <= m; k++) if (has[k]) idx.push(k);
-  if (monthInfo().partial && idx[idx.length - 1] === m) idx.pop(); // mois incomplet : pas encore comparable
+  if (monthInfo(m).partial && idx[idx.length - 1] === m) idx.pop(); // mois incomplet : pas encore comparable
   if (idx.length < 4) return `<span class="delta none">Trop tôt</span>`;
   const last = idx.slice(-3), prev = idx.slice(-6, -3);
   const a = last.reduce((s, k) => s + arr[k], 0) / last.length, b = prev.reduce((s, k) => s + arr[k], 0) / prev.length;
@@ -1844,8 +1914,8 @@ function trendWord(arr, has, m, kind){
 }
 
 /* ---------- fiche d'une catégorie ---------- */
-function openCatTrend(id){
-  const c = cat(id), m = trState.month, info = monthInfo();
+function openCatTrend(id, m = trState.month){
+  const c = cat(id), info = monthInfo(m);
   const {grid, has} = yearGrid(trState.year);
   const arr = grid[id] || Array(12).fill(0);
   $("cdSwatch").style.setProperty("--c", c.c);
